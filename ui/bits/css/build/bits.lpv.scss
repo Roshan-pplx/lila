@@ -14,7 +14,7 @@
   @include inline-start(50%);
   transform: translate(-50%, -50%);
   display: block;
-  padding: 1.5em 3em;
+  padding: 1.5em clamp(1.5em, 8vw, 3em);
   text-decoration: none;
   font-size: 1.5em;
   white-space: normal;

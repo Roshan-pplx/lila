@@ -4,6 +4,11 @@ import type { Prop } from '@/index';
 import type { EnhanceOpts } from '@/richText';
 export type { ChatCtrl } from './chatCtrl';
 
+export interface RelayPosition {
+  chapterId: string; // game/chapter ID
+  ply: number; // current move number
+}
+
 export interface ChatOpts {
   data: ChatData;
   writeable: boolean;
@@ -19,6 +24,8 @@ export interface ChatOpts {
   noteText?: string;
   plugin?: ChatPlugin;
   kidMode: boolean;
+  relayPosition?: () => RelayPosition | undefined;
+  onRelayNav?: (chapterId: string, ply: number) => void;
 }
 
 export type Tab = { key: string; isDisabled?: () => boolean };

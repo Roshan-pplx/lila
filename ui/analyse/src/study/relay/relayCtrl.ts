@@ -46,6 +46,22 @@ export default class RelayCtrl {
       const showLiveboard = () => this.tourShow() || !study.multiBoard.showResults();
       this.liveboardPlugin = new LiveboardPlugin(study.ctrl, showLiveboard, study.chapterSelect.get());
       study.ctrl.opts.chat.plugin = this.liveboardPlugin;
+
+      // Provide relay position callback for chat message embedding
+      study.ctrl.opts.chat.relayPosition = () => ({
+        chapterId: study.vm.chapterId,
+        ply: study.ctrl.node.ply,
+      });
+
+      // Provide relay navigation callback for clicking position badges in chat
+      study.ctrl.opts.chat.onRelayNav = (chapterId: string, ply: number) => {
+        study.setChapter(chapterId).then(success => {
+          if (success) {
+            study.ctrl.jumpToMain(ply);
+            study.ctrl.redraw();
+          }
+        });
+      };
     }
 
     const locationTab = location.hash.replace(/^#([\w-]+).*$/, '$1') as RelayTab;

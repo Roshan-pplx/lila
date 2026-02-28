@@ -15,6 +15,35 @@ import { enter } from '@/view';
 const whisperRegex = /^\/[wW](?:hisper)?\s/;
 const scrollState = { pinToBottom: true, lastScrollTop: 0 };
 
+// Sentinel character used to embed relay position in chat messages.
+// Format: \x03chapterId:ply\x03
+const SENTINEL_REGEX = /\x03([A-Za-z0-9]{8}):(\d{1,4})\x03/;
+
+interface ParsedLine {
+  text: string;
+  chapterId?: string;
+  ply?: number;
+}
+
+function parseSentinel(text: string): ParsedLine {
+  const match = text.match(SENTINEL_REGEX);
+  if (match) {
+    return {
+      text: text.replace(SENTINEL_REGEX, ''),
+      chapterId: match[1],
+      ply: parseInt(match[2]),
+    };
+  }
+  return { text };
+}
+
+/** Format ply as a human-readable move number, e.g. ply 1 -> "1.", ply 2 -> "1...", ply 3 -> "2." */
+function plyToMoveStr(ply: number): string {
+  if (ply <= 0) return '0.';
+  const moveNum = Math.ceil(ply / 2);
+  return ply % 2 === 1 ? `${moveNum}.` : `${moveNum}\u2026`;
+}
+
 export default function (ctrl: ChatCtrl): Array<VNode | undefined> {
   if (!ctrl.chatEnabled()) return [];
   const hasMod = !!ctrl.moderation;
@@ -44,6 +73,16 @@ export default function (ctrl: ChatCtrl): Array<VNode | undefined> {
                 ctrl.moderation?.open((e.target as HTMLElement).parentNode as HTMLElement),
               );
             else $el.on('click', '.flag', (e: Event) => flagReport(ctrl, e.target as HTMLElement));
+
+            // Handle clicks on relay position badges
+            $el.on('click', '.relay-pos', (e: Event) => {
+              const badge = e.target as HTMLElement;
+              const chapterId = badge.getAttribute('data-chapter');
+              const ply = badge.getAttribute('data-ply');
+              if (chapterId && ply) {
+                ctrl.opts.onRelayNav?.(chapterId, parseInt(ply));
+              }
+            });
 
             el.addEventListener('scroll', () => {
               if (el.scrollTop < scrollState.lastScrollTop) scrollState.pinToBottom = false;
@@ -262,12 +301,30 @@ const actionIcons = (ctrl: ChatCtrl, line: Line): Array<VNode | null> => {
   return icons;
 };
 
+function renderRelayPosBadge(parsed: ParsedLine): VNode | undefined {
+  if (!parsed.chapterId || parsed.ply === undefined) return undefined;
+  return h(
+    'span.relay-pos',
+    {
+      attrs: {
+        'data-chapter': parsed.chapterId,
+        'data-ply': parsed.ply,
+        'data-icon': licon.DiscBig,
+        title: `Go to move ${plyToMoveStr(parsed.ply)}`,
+      },
+    },
+    plyToMoveStr(parsed.ply),
+  );
+}
+
 function renderLine(ctrl: ChatCtrl, line: Line): VNode {
-  const textNode = renderText(line.t, ctrl.opts.enhance);
+  const parsed = parseSentinel(line.t);
+  const textNode = renderText(parsed.text, ctrl.opts.enhance);
+  const posBadge = ctrl.opts.onRelayNav ? renderRelayPosBadge(parsed) : undefined;
 
   if (line.u === 'lichess') return h('li.system', textNode);
 
-  if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode]);
+  if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode, posBadge]);
 
   const userNode = thunk('a', line.u, userThunk, [line.u, line.title, line.pc, line.f]);
   const userId = line.u?.toLowerCase();
@@ -275,7 +332,7 @@ function renderLine(ctrl: ChatCtrl, line: Line): VNode {
   const myUserId = ctrl.data.userId;
   const mentioned =
     !!myUserId &&
-    !!line.t
+    !!parsed.text
       .match(enhance.userPattern)
       ?.find(mention => mention.trim().toLowerCase() === `@${ctrl.data.userId}`);
 
@@ -288,6 +345,6 @@ function renderLine(ctrl: ChatCtrl, line: Line): VNode {
         mentioned,
       },
     },
-    [...actionIcons(ctrl, line), userNode, ' ', textNode],
+    [...actionIcons(ctrl, line), userNode, ' ', textNode, ...(posBadge ? [' ', posBadge] : [])],
   );
 }

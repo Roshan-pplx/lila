@@ -46,6 +46,34 @@ export default class RelayCtrl {
       const showLiveboard = () => this.tourShow() || !study.multiBoard.showResults();
       this.liveboardPlugin = new LiveboardPlugin(study.ctrl, showLiveboard, study.chapterSelect.get());
       study.ctrl.opts.chat.plugin = this.liveboardPlugin;
+
+      // ---------------------------------------------------------------------------
+      // Relay position embedding (issue #15029)
+      // ---------------------------------------------------------------------------
+      // When the user sends a chat message, embed the current game (chapter) and
+      // move (ply) so that other viewers can click back to that exact position.
+
+      /** Returns the current chapter ID and ply for embedding in outgoing messages. */
+      study.ctrl.opts.chat.relayPosition = () => ({
+        chapterId: study.vm.chapterId,
+        ply: study.ctrl.node.ply,
+      });
+
+      /**
+       * Called when a viewer clicks a relay position badge in the chat.
+       * 1. Switch to the embedded chapter (game).
+       * 2. Jump to the embedded ply (move).
+       */
+      study.ctrl.opts.chat.onRelayNav = (chapterId: string, ply: number) => {
+        // setChapter returns a Promise<boolean> — truthy when the chapter was
+        // successfully loaded (or was already active).
+        study.setChapter(chapterId).then((success: boolean) => {
+          if (success) {
+            study.ctrl.jumpToMain(ply);
+            study.ctrl.redraw();
+          }
+        });
+      };
     }
 
     const locationTab = location.hash.replace(/^#([\w-]+).*$/, '$1') as RelayTab;

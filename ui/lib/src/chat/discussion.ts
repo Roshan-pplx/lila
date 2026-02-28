@@ -15,6 +15,56 @@ import { enter } from '@/view';
 const whisperRegex = /^\/[wW](?:hisper)?\s/;
 const scrollState = { pinToBottom: true, lastScrollTop: 0 };
 
+// ---------------------------------------------------------------------------
+// Relay position sentinel
+// ---------------------------------------------------------------------------
+// A sentinel is appended to outgoing message text in chatCtrl.post() whenever
+// the relay context provides position data.  The format is:
+//   \x03<chapterId>:<ply>\x03
+//
+// \x03 (ETX – End of Text) is a non-printable ASCII control character that is
+// invisible in normal text rendering and is extremely unlikely to appear in
+// user-generated chat messages.  The chapter ID is an 8-character alphanumeric
+// Lila ID; ply is an integer up to 4 digits (max 9999 half-moves ≈ 5000 moves).
+//
+// The full sentinel is at most 1 + 8 + 1 + 4 + 1 = 15 characters, keeping the
+// combined message well within the 140-char limit for all realistic inputs.
+// ---------------------------------------------------------------------------
+const SENTINEL_REGEX = /\x03([A-Za-z0-9]{8}):(\d{1,4})\x03/;
+
+interface ParsedLine {
+  text: string;
+  chapterId?: string;
+  ply?: number;
+}
+
+/** Strip the sentinel from the raw line text and return its components. */
+function parseSentinel(raw: string): ParsedLine {
+  const match = raw.match(SENTINEL_REGEX);
+  if (match) {
+    return {
+      text: raw.replace(SENTINEL_REGEX, '').trimEnd(),
+      chapterId: match[1],
+      ply: parseInt(match[2], 10),
+    };
+  }
+  return { text: raw };
+}
+
+/**
+ * Convert a half-move ply to a human-readable chess move label.
+ * e.g. ply 0 → "start", ply 1 → "1.", ply 2 → "1…", ply 3 → "2."
+ */
+function plyToMoveStr(ply: number): string {
+  if (ply <= 0) return 'start';
+  const moveNum = Math.ceil(ply / 2);
+  return ply % 2 === 1 ? `${moveNum}.` : `${moveNum}\u2026`;
+}
+
+// ---------------------------------------------------------------------------
+// Main export
+// ---------------------------------------------------------------------------
+
 export default function (ctrl: ChatCtrl): Array<VNode | undefined> {
   if (!ctrl.chatEnabled()) return [];
   const hasMod = !!ctrl.moderation;
@@ -44,6 +94,17 @@ export default function (ctrl: ChatCtrl): Array<VNode | undefined> {
                 ctrl.moderation?.open((e.target as HTMLElement).parentNode as HTMLElement),
               );
             else $el.on('click', '.flag', (e: Event) => flagReport(ctrl, e.target as HTMLElement));
+
+            // Navigate to the game & move embedded in a relay position badge.
+            $el.on('click', '.relay-pos', (e: Event) => {
+              const badge = (e.target as HTMLElement).closest('.relay-pos') as HTMLElement | null;
+              if (!badge) return;
+              const chapterId = badge.getAttribute('data-chapter');
+              const plyStr = badge.getAttribute('data-ply');
+              if (chapterId && plyStr) {
+                ctrl.opts.onRelayNav?.(chapterId, parseInt(plyStr, 10));
+              }
+            });
 
             el.addEventListener('scroll', () => {
               if (el.scrollTop < scrollState.lastScrollTop) scrollState.pinToBottom = false;
@@ -262,12 +323,38 @@ const actionIcons = (ctrl: ChatCtrl, line: Line): Array<VNode | null> => {
   return icons;
 };
 
+/**
+ * Render a small clickable badge showing the move number that was embedded in
+ * the message.  Only rendered when onRelayNav is wired up (i.e. in a relay
+ * broadcast context) and the line actually contains position data.
+ */
+function renderRelayPosBadge(parsed: ParsedLine): VNode | undefined {
+  if (!parsed.chapterId || parsed.ply === undefined) return undefined;
+  const moveLabel = plyToMoveStr(parsed.ply);
+  return h(
+    'span.relay-pos',
+    {
+      attrs: {
+        'data-chapter': parsed.chapterId,
+        'data-ply': parsed.ply,
+        title: `Go to move ${moveLabel}`,
+        role: 'button',
+      },
+    },
+    [h('i', { attrs: { 'data-icon': licon.DiscBig } }), moveLabel],
+  );
+}
+
 function renderLine(ctrl: ChatCtrl, line: Line): VNode {
-  const textNode = renderText(line.t, ctrl.opts.enhance);
+  const parsed = parseSentinel(line.t);
+  const textNode = renderText(parsed.text, ctrl.opts.enhance);
+  // Only show the position badge when the relay nav callback is available
+  // (i.e. we are in a broadcast context and not just a regular study/game chat).
+  const posBadge = ctrl.opts.onRelayNav ? renderRelayPosBadge(parsed) : undefined;
 
   if (line.u === 'lichess') return h('li.system', textNode);
 
-  if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode]);
+  if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode, ...(posBadge ? [' ', posBadge] : [])]);
 
   const userNode = thunk('a', line.u, userThunk, [line.u, line.title, line.pc, line.f]);
   const userId = line.u?.toLowerCase();
@@ -275,7 +362,7 @@ function renderLine(ctrl: ChatCtrl, line: Line): VNode {
   const myUserId = ctrl.data.userId;
   const mentioned =
     !!myUserId &&
-    !!line.t
+    !!parsed.text
       .match(enhance.userPattern)
       ?.find(mention => mention.trim().toLowerCase() === `@${ctrl.data.userId}`);
 
@@ -286,8 +373,9 @@ function renderLine(ctrl: ChatCtrl, line: Line): VNode {
         me: userId === myUserId,
         host: !!(userId && ctrl.data.hostIds?.includes(userId)),
         mentioned,
+        'has-relay-pos': !!posBadge,
       },
     },
-    [...actionIcons(ctrl, line), userNode, ' ', textNode],
+    [...actionIcons(ctrl, line), userNode, ' ', textNode, ...(posBadge ? [' ', posBadge] : [])],
   );
 }

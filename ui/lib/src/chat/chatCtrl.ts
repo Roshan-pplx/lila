@@ -22,6 +22,10 @@ import { isMobile } from '@/device';
 
 type SubPair = { [K in keyof PubsubEvents]: [K, PubsubEvents[K]] }[keyof PubsubEvents];
 
+// Sentinel character used to embed relay position data in chat messages.
+// Format: \x03chapterId:ply\x03
+const SENTINEL = '\x03';
+
 export class ChatCtrl {
   data: ChatData;
   private maxLines = 200;
@@ -119,6 +123,15 @@ export class ChatCtrl {
     if (text.length > 140) {
       alert('Max length: 140 chars. ' + text.length + ' chars used.');
       return false;
+    }
+    // Embed relay position data if a relayPosition callback is provided.
+    // Sentinel format: \x03chapterId:ply\x03 — appended after the user's text.
+    // Only embed when the combined string stays within the 140-char limit.
+    const pos = this.opts.relayPosition?.();
+    if (pos) {
+      const sentinel = `${SENTINEL}${pos.chapterId}:${pos.ply}${SENTINEL}`;
+      const combined = text + sentinel;
+      if (combined.length <= 140) text = combined;
     }
     pubsub.emit('socket.send', 'talk', text);
     return true;

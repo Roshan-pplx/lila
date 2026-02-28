@@ -31,7 +31,7 @@ function parseSentinel(text: string): ParsedLine {
     return {
       text: text.replace(SENTINEL_REGEX, ''),
       chapterId: match[1],
-      ply: parseInt(match[2]),
+      ply: parseInt(match[2], 10),
     };
   }
   return { text };
@@ -39,7 +39,7 @@ function parseSentinel(text: string): ParsedLine {
 
 /** Format ply as a human-readable move number, e.g. ply 1 -> "1.", ply 2 -> "1...", ply 3 -> "2." */
 function plyToMoveStr(ply: number): string {
-  if (ply <= 0) return '0.';
+  if (ply <= 0) return 'start';
   const moveNum = Math.ceil(ply / 2);
   return ply % 2 === 1 ? `${moveNum}.` : `${moveNum}\u2026`;
 }
@@ -80,7 +80,7 @@ export default function (ctrl: ChatCtrl): Array<VNode | undefined> {
               const chapterId = badge.getAttribute('data-chapter');
               const ply = badge.getAttribute('data-ply');
               if (chapterId && ply) {
-                ctrl.opts.onRelayNav?.(chapterId, parseInt(ply));
+                ctrl.opts.onRelayNav?.(chapterId, parseInt(ply, 10));
               }
             });
 
@@ -282,7 +282,7 @@ function renderText(t: string, opts?: enhance.EnhanceOpts) {
 const userThunk = (name: string, title?: string, patronColor?: PatronColor, flair?: Flair) =>
   userLink({ name, title, patronColor, line: !!patronColor, flair, online: !!patronColor });
 
-const actionIcons = (ctrl: ChatCtrl, line: Line): Array<VNode | null> => {
+const actionIcons = (ctrl: ChatCtrl, line: Line, displayText?: string): Array<VNode | null> => {
   if (!ctrl.data.userId || !line.u || ctrl.data.userId === line.u) return [];
   const icons = [];
   if (ctrl.canPostArbitraryText() && !ctrl.data.resourceId.startsWith('game'))
@@ -295,7 +295,7 @@ const actionIcons = (ctrl: ChatCtrl, line: Line): Array<VNode | null> => {
     ctrl.moderation
       ? modLineAction()
       : h('action.flag', {
-          attrs: { 'data-icon': licon.CautionTriangle, title: 'Report', 'data-text': line.t },
+          attrs: { 'data-icon': licon.CautionTriangle, title: 'Report', 'data-text': displayText ?? line.t },
         }),
   );
   return icons;
@@ -311,6 +311,7 @@ function renderRelayPosBadge(parsed: ParsedLine): VNode | undefined {
         'data-ply': parsed.ply,
         'data-icon': licon.DiscBig,
         title: `Go to move ${plyToMoveStr(parsed.ply)}`,
+        role: 'button',
       },
     },
     plyToMoveStr(parsed.ply),
@@ -324,7 +325,7 @@ function renderLine(ctrl: ChatCtrl, line: Line): VNode {
 
   if (line.u === 'lichess') return h('li.system', textNode);
 
-  if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode, posBadge]);
+  if (line.c) return h('li', [h('span.color', '[' + line.c + ']'), textNode, ...(posBadge ? [' ', posBadge] : [])]);
 
   const userNode = thunk('a', line.u, userThunk, [line.u, line.title, line.pc, line.f]);
   const userId = line.u?.toLowerCase();
@@ -343,8 +344,9 @@ function renderLine(ctrl: ChatCtrl, line: Line): VNode {
         me: userId === myUserId,
         host: !!(userId && ctrl.data.hostIds?.includes(userId)),
         mentioned,
+        'has-relay-pos': !!posBadge,
       },
     },
-    [...actionIcons(ctrl, line), userNode, ' ', textNode, ...(posBadge ? [' ', posBadge] : [])],
+    [...actionIcons(ctrl, line, parsed.text), userNode, ' ', textNode, ...(posBadge ? [' ', posBadge] : [])],
   );
 }

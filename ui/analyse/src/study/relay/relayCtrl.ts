@@ -44,7 +44,12 @@ export default class RelayCtrl {
     this.roundSelectShow = toggle(false, this.study.ctrl.redraw);
     if (study.ctrl.opts.chat) {
       const showLiveboard = () => this.tourShow() || !study.multiBoard.showResults();
-      this.liveboardPlugin = new LiveboardPlugin(study.ctrl, showLiveboard, study.chapterSelect.get());
+      this.liveboardPlugin = new LiveboardPlugin(
+        study.ctrl,
+        showLiveboard,
+        study.chapterSelect.get(),
+        study.multiCloudEval,
+      );
       study.ctrl.opts.chat.plugin = this.liveboardPlugin;
     }
 

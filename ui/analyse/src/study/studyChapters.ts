@@ -108,7 +108,10 @@ export default class StudyChaptersCtrl {
   setTags = (id: ChapterId, tags: TagArray[]) => {
     const chap = this.list.get(id),
       result = findTag(tags, 'result');
-    if (chap && result) chap.status = result.replace(/1\/2/g, '½') as StatusStr;
+    if (chap && result) {
+      chap.status = result.replace(/1\/2/g, '½') as StatusStr;
+      chap.playing = defined(chap.lastMove) && chap.status === '*';
+    }
   };
 
   hasPlayingChapter = () => this.list.all().some(c => c.playing);

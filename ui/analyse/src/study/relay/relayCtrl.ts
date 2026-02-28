@@ -189,6 +189,14 @@ export default class RelayCtrl {
     }
   };
 
+  checkRoundFinished = () => {
+    if (this.round.ongoing && !this.study.chapters.hasPlayingChapter()) {
+      this.round.ongoing = false;
+      this.round.finished = true;
+      this.redraw();
+    }
+  };
+
   private socketHandlers = {
     relaySync: (sync: RelaySync) => {
       this.data.sync = {

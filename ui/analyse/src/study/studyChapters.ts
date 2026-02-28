@@ -50,7 +50,6 @@ export default class StudyChaptersCtrl {
   editForm: StudyChapterEditForm;
   localPaths: LocalPaths = {};
   scroller = new StudyChapterScroller();
-  onAllGamesFinished?: () => void;
 
   constructor(
     initChapters: ChapterPreviewFromServer[],
@@ -78,7 +77,7 @@ export default class StudyChaptersCtrl {
         fen: c.fen || INITIAL_FEN,
         players: c.players ? this.convertPlayersFromServer(c.players) : undefined,
         orientation: c.orientation || 'white',
-        playing: defined(c.lastMove) && c.status === '*',
+        playing: isPlaying(c),
         lastMoveAt: defined(c.thinkTime) ? Date.now() - 1000 * c.thinkTime : undefined,
       })),
     );
@@ -110,19 +109,9 @@ export default class StudyChaptersCtrl {
     const chap = this.list.get(id),
       result = findTag(tags, 'result');
     if (chap && result) {
-      const prevStatus = chap.status;
       chap.status = result.replace(/1\/2/g, '½') as StatusStr;
-      if (chap.status !== '*') {
-        chap.playing = false;
-        if (prevStatus !== chap.status && this.onAllGamesFinished && this.allGamesFinished())
-          this.onAllGamesFinished();
-      }
+      chap.playing = isPlaying(chap);
     }
-  };
-
-  allGamesFinished = (): boolean => {
-    const chapters = this.list.all();
-    return chapters.length > 0 && chapters.every(c => c.status && c.status !== '*');
   };
 
   hasPlayingChapter = () => this.list.all().some(c => c.playing);
@@ -136,6 +125,8 @@ export const convertPlayerFromServer = <A extends StudyPlayerFromServer>(player:
     fed: player.fed && fedName ? { id: player.fed, name: fedName, i18nName } : undefined,
   };
 };
+
+export const isPlaying = (c: { lastMove?: string; status?: string }) => defined(c.lastMove) && c.status === '*';
 
 export function isFinished(c: StudyChapter) {
   const result = findTag(c.tags, 'result');

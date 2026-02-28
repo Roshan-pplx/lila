@@ -100,10 +100,6 @@ export default class RelayCtrl {
       this.redraw();
     });
     setInterval(study.ctrl.redraw, 1000);
-
-    study.chapters.onAllGamesFinished = this.onAllGamesFinished;
-    // reconcile round status if all chapters already have final results at load time
-    if (this.round.ongoing && study.chapters.allGamesFinished()) this.onAllGamesFinished();
   }
 
   redraw = () => {
@@ -193,9 +189,9 @@ export default class RelayCtrl {
     }
   };
 
-  private onAllGamesFinished = () => {
-    if (this.round.ongoing) {
-      this.round.ongoing = undefined;
+  checkRoundFinished = () => {
+    if (this.round.ongoing && !this.study.chapters.hasPlayingChapter()) {
+      this.round.ongoing = false;
       this.round.finished = true;
       this.redraw();
     }

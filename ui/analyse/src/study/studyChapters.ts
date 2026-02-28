@@ -50,7 +50,6 @@ export default class StudyChaptersCtrl {
   editForm: StudyChapterEditForm;
   localPaths: LocalPaths = {};
   scroller = new StudyChapterScroller();
-  onAllGamesFinished?: () => void;
 
   constructor(
     initChapters: ChapterPreviewFromServer[],
@@ -110,17 +109,10 @@ export default class StudyChaptersCtrl {
     const chap = this.list.get(id),
       result = findTag(tags, 'result');
     if (chap && result) {
-      const prevStatus = chap.status;
       chap.status = result.replace(/1\/2/g, '½') as StatusStr;
-      if (chap.status !== '*') {
-        chap.playing = false;
-        if (prevStatus === '*' && this.onAllGamesFinished && this.allGamesFinished())
-          this.onAllGamesFinished();
-      }
+      chap.playing = defined(chap.lastMove) && chap.status === '*';
     }
   };
-
-  allGamesFinished = () => this.list.all().every(c => c.status && c.status !== '*');
 
   hasPlayingChapter = () => this.list.all().some(c => c.playing);
 }

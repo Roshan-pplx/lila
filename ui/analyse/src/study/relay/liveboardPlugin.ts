@@ -1,9 +1,11 @@
-import { hl, type VNode, getChessground, initMiniBoardWith, spinnerVdom } from 'lib/view';
+import { hl, type VNode, type MaybeVNode, getChessground, initMiniBoardWith, onInsert, spinnerVdom } from 'lib/view';
 import { fenColor, uciToMove } from 'lib/game/chess';
 import { type ChatPlugin } from 'lib/chat/interfaces';
 import type AnalyseCtrl from '@/ctrl';
 import { mainlineNodeList } from 'lib/tree/ops';
 import { type ChapterId } from '../interfaces';
+import { type CloudEval, type MultiCloudEval, renderScore } from '../multiCloudEval';
+import { h } from 'snabbdom';
 
 type BoardConfig = CgConfig & { lastUci?: Uci };
 
@@ -19,6 +21,7 @@ export class LiveboardPlugin implements ChatPlugin {
     readonly ctrl: AnalyseCtrl,
     readonly isDisabled: () => boolean,
     private chapter: ChapterId | undefined,
+    private readonly cloudEval?: MultiCloudEval,
   ) {}
 
   reset = () => {
@@ -56,14 +59,57 @@ export class LiveboardPlugin implements ChatPlugin {
     this.board.orientation = this.ctrl.bottomColor();
     this.animate = true;
 
-    return hl('div.chat-liveboard.is2d', {
-      hook: {
-        insert: (vn: VNode) => initMiniBoardWith(vn.elm as HTMLElement, this.board!),
-        update: (_, vn: VNode) => {
-          getChessground(vn.elm as HTMLElement)?.set(this.board!);
-          this.animate = true;
+    const orientation = this.board.orientation || 'white';
+    const fen = this.board.fen as FEN;
+    const cloudEval = this.cloudEval?.thisIfShowEval();
+    const boardNode = this.board;
+
+    return hl('div.chat-liveboard-wrap.is2d', [
+      hl('div.chat-liveboard', {
+        hook: {
+          insert: (vn: VNode) => initMiniBoardWith(vn.elm as HTMLElement, boardNode),
+          update: (_, vn: VNode) => {
+            getChessground(vn.elm as HTMLElement)?.set(boardNode);
+            this.animate = true;
+          },
         },
-      },
-    });
+      }),
+      cloudEval ? liveboardEvalGauge(fen, orientation, this.chapter, cloudEval) : undefined,
+    ]);
   }
 }
+
+const liveboardEvalGauge = (
+  fen: FEN,
+  orientation: Color,
+  chapterId: ChapterId | undefined,
+  cloudEval: MultiCloudEval,
+): MaybeVNode => {
+  const tag = `span.mini-game__gauge${orientation === 'black' ? '.mini-game__gauge--flip' : ''}`;
+
+  return h(
+    tag,
+    {
+      attrs: { 'data-id': chapterId || 'liveboard' },
+      hook: {
+        ...onInsert(cloudEval.observe),
+        postpatch(old, vnode) {
+          const elm = vnode.elm as HTMLElement;
+          const prevNodeCloud: CloudEval | undefined = old.data?.cloud;
+          const cev = cloudEval.getCloudEval(fen) || prevNodeCloud;
+          if (cev?.chances !== prevNodeCloud?.chances) {
+            (elm.firstChild as HTMLElement).style.height = `${Math.round(
+              ((1 - (cev?.chances || 0)) / 2) * 100,
+            )}%`;
+            if (cev) {
+              elm.title = renderScore(cev);
+              elm.classList.add('mini-game__gauge--set');
+            }
+          }
+          vnode.data!.cloud = cev;
+        },
+      },
+    },
+    [h('span.mini-game__gauge__black'), h('tick')],
+  );
+};

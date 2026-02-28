@@ -12,10 +12,23 @@
   }
 }
 
+.chat-liveboard-wrap {
+  display: flex;
+  flex-flow: row nowrap;
+  width: 100%;
+
+  .mini-game__gauge {
+    flex: 0 0 0.7em;
+    max-width: 1.2em;
+    margin-left: 3px;
+    order: 1;
+  }
+}
+
 .chat-liveboard {
   display: flex;
   position: relative;
-  width: 100%;
+  flex: 1 1 auto;
   aspect-ratio: 1;
 }
 

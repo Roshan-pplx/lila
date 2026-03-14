@@ -335,7 +335,7 @@ export default class StudyCtrl {
   };
 
   isCevalAllowed = () =>
-    !this.relay?.tourShow() &&
+    (!this.relay?.tourShow() || site.blindMode) &&
     !this.isGamebookPlay() &&
     !!(this.data.chapter.features.computer || this.data.chapter.practice);
 
@@ -408,7 +408,7 @@ export default class StudyCtrl {
   xhrReload = throttlePromiseDelay(
     () => 400,
     /* `callback` runs immediately after the xhr, and is not affected by the delay */
-    (withChapters: boolean = false, callback: () => void = () => {}) => {
+    (withChapters: boolean = false, immediateCallback: () => void = () => {}) => {
       this.vm.loading = true;
       return xhr
         .reload(
@@ -418,7 +418,7 @@ export default class StudyCtrl {
           withChapters,
         )
         .then(this.onReload, site.reload)
-        .then(callback);
+        .then(immediateCallback);
     },
   );
 
@@ -836,6 +836,7 @@ export default class StudyCtrl {
     setTags: d => {
       this.setMemberActive(d.w);
       this.chapters.setTags(d.chapterId, d.tags);
+      this.relay?.onGameEnd();
       if (d.chapterId !== this.vm.chapterId) return;
       this.data.chapter.tags = d.tags;
       this.redraw();
